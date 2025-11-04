@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 # Carga variables de entorno (Render + local)
 load_dotenv()
 
-# === CONFIGURACIÓN (usa variables de entorno en Render) ===
+# === CONFIGURACIÓN ===
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 SHEET_ID = os.getenv("SHEET_ID")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
@@ -40,28 +40,25 @@ logger = logging.getLogger(__name__)
 # === EXTRAER GASTO ===
 def extraer_gasto(texto: str):
     texto = texto.lower().strip()
-    
+    monto = None
+    categoria = "varios"
+
     if "pagué" in texto or "pague" in texto:
-        # Pagué 500 en luz
         partes = re.split(r'\ben\b', texto, 1)
         if len(partes) > 1:
             monto_str = partes[0].replace("pagué", "").replace("pague", "").strip()
             categoria = partes[1].strip()
         else:
             monto_str = partes[0].replace("pagué", "").replace("pague", "").strip()
-            categoria = "varios"
     elif "gasto" in texto:
-        # Gasto 200 luz
-        partes = texto.replace("gasto", "").strip().split(maxsplit=1)
-        if len(partes) >= 1:
-            monto_str = partes[0]
-            categoria = partes[1].strip() if len(partes) > 1 else "varios"
-        else:
-            return None
+        texto = texto.replace("gasto", "").strip()
+        partes = re.split(r'\s', texto, maxsplit=1)
+        monto_str = partes[0]
+        if len(partes) > 1:
+            categoria = partes[1].strip()
     else:
         return None
 
-    # Extrae número
     match = re.search(r'\d+', monto_str)
     if not match:
         return None
@@ -69,6 +66,7 @@ def extraer_gasto(texto: str):
 
     fecha = datetime.now().strftime("%Y-%m-%d")
     return {"monto": monto, "categoria": categoria.title(), "fecha": fecha}
+
 # === GUARDAR EN SHEETS ===
 def guardar_en_sheet(monto, categoria, fecha):
     try:
@@ -76,7 +74,7 @@ def guardar_en_sheet(monto, categoria, fecha):
         logger.info(f"Guardado: {fecha} | ${monto} | {categoria}")
         return True
     except Exception as e:
-        logger.error(f"Error al guardar: {e}")
+        logger.error(f"Error: {e}")
         return False
 
 # === COMANDOS ===
@@ -169,7 +167,7 @@ async def cmd_actualizar_resumen(update: Update, context: ContextTypes.DEFAULT_T
     except Exception as e:
         await update.message.reply_text(f"Error: {e}")
 
-# === INICIAR BOT ===
+# === MAIN ===
 def main():
     app = Application.builder().token(TELEGRAM_TOKEN).build()
 
