@@ -51,17 +51,14 @@ def extraer_gasto(texto: str):
         else:
             monto_str = partes[0].replace("pagué", "").replace("pague", "").strip()
     elif "gasto" in texto:
-        partes = texto.replace("gasto", "").strip().split(maxsplit=1)
-        monto_str = partes[0]
-        if len(partes) > 1:
-            categoria = partes[1].strip()
+        texto = texto.replace("gasto", "").strip()
+        match = re.search(r'\d+', texto)
+        if not match:
+            return None
+        monto = int(match.group())
+        categoria = re.sub(r'\d+', '', texto).strip() or "varios"
     else:
         return None
-
-    match = re.search(r'\d+', monto_str)
-    if not match:
-        return None
-    monto = int(match.group())
 
     fecha = datetime.now().strftime("%Y-%m-%d")
     return {"monto": monto, "categoria": categoria.title(), "fecha": fecha}
