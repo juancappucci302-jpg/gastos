@@ -14,14 +14,13 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # === CONFIGURACIÓN (usa variables de entorno en Render) ===
-TELEGRAM_TOKEN = "8394538839:AAHnQrA698hno7C5APGgXyI7J_aiT3jJ1s8"  # Tu token de Telegram (deja si ya lo tienes)
-SHEET_ID = "1IoZEA-RempS9tiybvUmczTOr_ZwWG1W9_-rH22Rp3ak"  # Tu ID de Google Sheet (deja si ya lo tienes)
-GROQ_API_KEY = "GROQ_API_KEY"  # Tu clave de GROQ (deja si ya la tienes)
-GOOGLE_CREDENTIALS_JSON = os.getenv("GOOGLE_CREDENTIALS")  # JSON completo como string
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+SHEET_ID = os.getenv("SHEET_ID")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+GOOGLE_CREDENTIALS_JSON = os.getenv("GOOGLE_CREDENTIALS")
 
 # === CONEXIÓN A GOOGLE SHEETS ===
 scopes = ["https://www.googleapis.com/auth/spreadsheets"]
-
 if GOOGLE_CREDENTIALS_JSON:
     creds_dict = json.loads(GOOGLE_CREDENTIALS_JSON)
     creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
@@ -29,16 +28,16 @@ else:
     creds = Credentials.from_service_account_file("credentials.json", scopes=scopes)
 
 client_sheets = gspread.authorize(creds)
-sheet = client_sheets.open_by_key(SHEET_ID).worksheet("Hoja 1")  # Cambia si tu pestaña es "Gastos"
+sheet = client_sheets.open_by_key(SHEET_ID).worksheet("Hoja 1")
 
-# === CLIENTE GROQ (compatible con OpenAI) ===
+# === CLIENTE GROQ ===
 client_groq = OpenAI(api_key=GROQ_API_KEY, base_url="https://api.groq.com/openai/v1")
 
 # Logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# === EXTRAER GASTO DEL MENSAJE ===
+# === EXTRAER GASTO ===
 def extraer_gasto(texto: str):
     texto = texto.lower().strip()
     monto = None
@@ -52,23 +51,22 @@ def extraer_gasto(texto: str):
         else:
             monto_str = partes[0].replace("pagué", "").replace("pague", "").strip()
     elif "gasto" in texto:
-        monto_str = texto.replace("gasto", "").strip()
+        partes = texto.replace("gasto", "").strip().split(maxsplit=1)
+        monto_str = partes[0]
+        if len(partes) > 1:
+            categoria = partes[1].strip()
     else:
         return None
 
-    # Extrae número
     match = re.search(r'\d+', monto_str)
     if not match:
         return None
     monto = int(match.group())
 
-    # Limpia categoría
-    categoria = re.sub(r'\d+', '', monto_str).strip() or "varios"
-
     fecha = datetime.now().strftime("%Y-%m-%d")
     return {"monto": monto, "categoria": categoria.title(), "fecha": fecha}
 
-# === GUARDAR EN GOOGLE SHEETS ===
+# === GUARDAR EN SHEETS ===
 def guardar_en_sheet(monto, categoria, fecha):
     try:
         sheet.append_row([fecha, monto, categoria])
@@ -78,7 +76,7 @@ def guardar_en_sheet(monto, categoria, fecha):
         logger.error(f"Error al guardar: {e}")
         return False
 
-# === COMANDOS DEL BOT ===
+# === COMANDOS ===
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "¡Hola! Soy *GastosHogarBot* (GRATIS)\n\n"
@@ -154,7 +152,6 @@ async def cmd_actualizar_resumen(update: Update, context: ContextTypes.DEFAULT_T
                 except:
                     pass
 
-        # Crea o usa pestaña "Resumen"
         try:
             hoja_resumen = client_sheets.open_by_key(SHEET_ID).worksheet("Resumen")
         except gspread.exceptions.WorksheetNotFound:
@@ -169,11 +166,10 @@ async def cmd_actualizar_resumen(update: Update, context: ContextTypes.DEFAULT_T
     except Exception as e:
         await update.message.reply_text(f"Error: {e}")
 
-# === INICIAR BOT (polling local / webhook en Render) ===
+# === INICIAR BOT ===
 def main():
     app = Application.builder().token(TELEGRAM_TOKEN).build()
 
-    # Handlers
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("resumen", cmd_resumen))
     app.add_handler(CommandHandler("categorias", cmd_categorias))
@@ -182,7 +178,6 @@ def main():
 
     print("Bot GastosHogarBot iniciado (GRATIS + 24/7)")
 
-    # === MODO RENDER (WEBHOOK) ===
     if os.getenv('RENDER'):
         port = int(os.environ.get('PORT', 10000))
         app.run_webhook(
@@ -191,7 +186,6 @@ def main():
             url_path=TELEGRAM_TOKEN,
             webhook_url=f"https://{os.environ['RENDER_EXTERNAL_HOSTNAME']}/{TELEGRAM_TOKEN}"
         )
-    # === MODO LOCAL (POLLING) ===
     else:
         app.run_polling(drop_pending_updates=True)
 
