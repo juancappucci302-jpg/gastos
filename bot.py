@@ -40,29 +40,35 @@ logger = logging.getLogger(__name__)
 # === EXTRAER GASTO ===
 def extraer_gasto(texto: str):
     texto = texto.lower().strip()
-    monto = None
-    categoria = "varios"
-
+    
     if "pagué" in texto or "pague" in texto:
+        # Pagué 500 en luz
         partes = re.split(r'\ben\b', texto, 1)
         if len(partes) > 1:
             monto_str = partes[0].replace("pagué", "").replace("pague", "").strip()
             categoria = partes[1].strip()
         else:
             monto_str = partes[0].replace("pagué", "").replace("pague", "").strip()
+            categoria = "varios"
     elif "gasto" in texto:
-        texto = texto.replace("gasto", "").strip()
-        match = re.search(r'\d+', texto)
-        if not match:
+        # Gasto 200 luz
+        partes = texto.replace("gasto", "").strip().split(maxsplit=1)
+        if len(partes) >= 1:
+            monto_str = partes[0]
+            categoria = partes[1].strip() if len(partes) > 1 else "varios"
+        else:
             return None
-        monto = int(match.group())
-        categoria = re.sub(r'\d+', '', texto).strip() or "varios"
     else:
         return None
 
+    # Extrae número
+    match = re.search(r'\d+', monto_str)
+    if not match:
+        return None
+    monto = int(match.group())
+
     fecha = datetime.now().strftime("%Y-%m-%d")
     return {"monto": monto, "categoria": categoria.title(), "fecha": fecha}
-
 # === GUARDAR EN SHEETS ===
 def guardar_en_sheet(monto, categoria, fecha):
     try:
